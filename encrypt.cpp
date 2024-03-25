@@ -2,84 +2,118 @@
 #include <cstdint>
 #include <fstream>
 #include "./bmp/bmp.h"
+#include <bitset>
 
-#define FILEPATH "original.bmp"
+#define FILEPATH "6.bmp"
 
 using namespace std;
 
-int main() {
+void hide_byte_into_pixel(RGBQUAD *pixel, uint8_t hide_byte)
+{
+  pixel->rgbBlue &= (0xFC);
+  pixel->rgbBlue |= (hide_byte >> 6) & 0x3;
+  pixel->rgbGreen &= (0xFC);
+  pixel->rgbGreen |= (hide_byte >> 4) & 0x3;
+  pixel->rgbRed &= (0xFC);
+  pixel->rgbRed |= (hide_byte >> 2) & 0x3;
+  pixel->rgbReserved &= (0xFC);
+  pixel->rgbReserved |= (hide_byte) & 0x3;
+}
+uint8_t get_byte_from_pixel(RGBQUAD *pixel)
+{
+  uint8_t byte = 0b00000000;
+
+  byte |= pixel->rgbReserved & 0b00000011;
+  byte |= (pixel->rgbRed & 0b00000011) << 2;
+  byte |= (pixel->rgbGreen & 0b00000011) << 4;
+  byte |= (pixel->rgbBlue & 0b00000011) << 6;
+
+  return byte;
+}
+
+void fill_binary_message(uint8_t *binary_message, string message)
+{
+  for (int i = 0; i < message.length(); i++)
+  {
+    binary_message[i] = static_cast<uint8_t>(message[i]);
+  }
+
+  binary_message[message.length()] = 0xFF;
+}
+
+int main()
+{
   string message;
   cin >> message;
-  cout << message << endl;
+  // cout << message << endl;
 
-  uint8_t* messageByteSet = new uint8_t[message.length() + 1];
+  uint8_t *binary_message = new uint8_t[message.length() + 1];
 
-  for(int i = 0; i < message.length(); i++) {
-    messageByteSet[i] = static_cast<uint8_t>(message[i]);
-  }
+  // for (int i = 0; i < message.length(); i++)
+  // {
+  //   binary_message[i] = static_cast<uint8_t>(message[i]);
+  // }
 
-  messageByteSet[message.length()] = 0xFF;
+  // binary_message[message.length()] = 0xFF;
 
-  for(int i = 0; i < message.length() + 1; i++) {
-    std::cout << messageByteSet[i] << std::endl;
-  }
+  fill_binary_message(binary_message, message);
 
-  ifstream Fin(FILEPATH, ios::binary);
+  RGBQUAD *pixels = new RGBQUAD[message.length()];
+  ifstream pictureIN(FILEPATH, ios::binary);
+  BITMAPFILEHEADER file_header;
+  BITMAPINFOHEADER BITMAP_header;
 
-  BITMAPFILEHEADER bmpFileHeader;
-  BITMAPINFOHEADER bmpInfoHeader;
+  pictureIN.read(reinterpret_cast<char *>(&file_header), sizeof(BITMAPFILEHEADER));
+  pictureIN.read(reinterpret_cast<char *>(&BITMAP_header), sizeof(BITMAPINFOHEADER));
 
-  Fin.read(reinterpret_cast<char*>(&bmpFileHeader), sizeof(BITMAPFILEHEADER));
-  Fin.read(reinterpret_cast<char*>(&bmpInfoHeader), sizeof(BITMAPINFOHEADER));
+  streampos picture_starts = pictureIN.tellg();
 
-  RGBQUAD* pixels = new RGBQUAD[message.length()];
-
-  streampos finPosition = Fin.tellg();
-
-  for(int i = 0; i < message.length(); i++) {
+  for (int i = 0; i < message.length(); i++)
+  {
     RGBQUAD pixel;
 
-    Fin.read(reinterpret_cast<char*>(&pixel.blue), sizeof(uint8_t));
-    Fin.read(reinterpret_cast<char*>(&pixel.green), sizeof(uint8_t));
-    Fin.read(reinterpret_cast<char*>(&pixel.red), sizeof(uint8_t));
-    Fin.read(reinterpret_cast<char*>(&pixel.reserved), sizeof(uint8_t));
+    pictureIN.read(reinterpret_cast<char *>(&pixel.rgbBlue), sizeof(uint8_t));
+    pictureIN.read(reinterpret_cast<char *>(&pixel.rgbGreen), sizeof(uint8_t));
+    pictureIN.read(reinterpret_cast<char *>(&pixel.rgbRed), sizeof(uint8_t));
+    pictureIN.read(reinterpret_cast<char *>(&pixel.rgbReserved), sizeof(uint8_t));
 
     pixels[i] = pixel;
   }
 
-  Fin.close();
+  pictureIN.close();
 
-  ofstream Fout(FILEPATH, ios::binary | ios::in | ios::ate);
-  Fout.seekp(finPosition);
+  ofstream pictureOUT(FILEPATH, ios::binary | ios::in | ios::ate);
+  pictureOUT.seekp(picture_starts);
 
-  streampos foutPosition = Fout.tellp();
-  cout << "Fin position: " << finPosition << endl;
-  cout << "Fout position: " << foutPosition << endl;
+  streampos foutPosition = pictureOUT.tellp();
+  // cout << "Fin position: " << picture_starts << endl;
+  // cout << "Fout position: " << foutPosition << endl;
 
-  cout << "message len: " <<  message.length() << endl;
+  // cout << "message len: " << message.length() << endl;
 
-  for(int i = 0; i < message.length(); i++) {
+  for (int i = 0; i < message.length(); i++)
+  {
     RGBQUAD newPixel = pixels[i];
 
-    cout << "Old pixel: " << endl;
-    printPixel(&newPixel);
+    // cout << "Old pixel: " << endl;s
+    // printPixel(&newPixel);
 
-    hideByte(&newPixel, messageByteSet[i]);
+    hide_byte_into_pixel(&newPixel, binary_message[i]);
 
-    cout << "New pixel" << endl;
-    printPixel(&newPixel);
+    // cout << "New pixel" << endl;
+    // printPixel(&newPixel);
     cout << endl;
 
-    Fout.put(newPixel.blue);
-    Fout.put(newPixel.green);
-    Fout.put(newPixel.red);
-    Fout.put(newPixel.reserved);
+    pictureOUT.put(newPixel.rgbBlue);
+    pictureOUT.put(newPixel.rgbGreen);
+    pictureOUT.put(newPixel.rgbRed);
+    pictureOUT.put(newPixel.rgbReserved);
   }
 
-  streampos foutPosition2 = Fout.tellp();
-  cout << "Fout position: " << foutPosition2<< endl;
-  
-  Fout.close();
+  // streampos foutPosition2 = pictureOUT.tellp();
+  // cout << "Fout position: " << foutPosition2 << endl;
+
+  pictureOUT.close();
 
   return 0;
 }
